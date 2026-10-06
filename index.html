@@ -26,7 +26,29 @@
 
   /* ---------- 设置页 ---------- */
   .setup h2 { font-size: 16px; margin: 14px 0 10px; color: #8fd0ff; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* ---------- 章节手风琴 ---------- */
+  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tool-btn {
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+    background: rgba(255,255,255,0.05); color: #9fc6e8; cursor: pointer;
+    font-size: 12px; padding: 5px 12px;
+  }
+  .tool-btn:hover { background: rgba(255,255,255,0.14); }
+  .ch-group { border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
+  .ch-head { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; background: rgba(255,255,255,0.05); user-select: none; }
+  .ch-head:hover { background: rgba(255,255,255,0.1); }
+  .ch-arrow { color: #8fd0ff; font-size: 11px; transition: transform .2s; width: 14px; }
+  .ch-group.open .ch-arrow { transform: rotate(90deg); }
+  .ch-title { flex: 1; font-size: 14px; font-weight: 600; color: #eaf2f8; }
+  .ch-meta { font-size: 12px; color: #9fb8cc; white-space: nowrap; }
+  .ch-all {
+    font-size: 12px; color: #8fd0ff; background: none; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 2px 10px;
+  }
+  .ch-all:hover { background: rgba(255,255,255,0.1); }
+  .ch-body { display: none; padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  .ch-group.open .ch-body { display: flex; }
   .chip {
     border: 1px solid rgba(255,255,255,0.25); border-radius: 999px;
     padding: 6px 14px; font-size: 13px; cursor: pointer;
@@ -111,13 +133,19 @@
 <div class="container">
   <header>
     <h1>📇 医学抽认卡 · 记忆曲线自测</h1>
-    <p>儿童抗菌药物 + 诸福棠《实用儿科学》第14章 · 支持 Anki 式间隔重复复习</p>
+    <p>儿童抗菌药物 + 诸福棠《实用儿科学》第14、17~32章 · 支持 Anki 式间隔重复复习</p>
   </header>
 
   <!-- 设置 -->
   <section id="setup" class="panel setup">
     <h2>① 选择模块</h2>
-    <div class="chips" id="moduleChips"></div>
+    <div class="toolbar">
+      <button class="tool-btn" id="btnExpandAll">全部展开</button>
+      <button class="tool-btn" id="btnCollapseAll">全部收起</button>
+      <button class="tool-btn" id="btnSelectAll">全选</button>
+      <button class="tool-btn" id="btnSelectNone">清空</button>
+    </div>
+    <div id="moduleChips"></div>
     <h2>② 抽卡方式</h2>
     <div class="modes">
       <button class="mode-btn on" data-mode="seq">顺序抽卡</button>
@@ -1980,6 +2008,15 @@ const CARDS_CH32 = [
   }
 
   const modMap = Object.fromEntries(MODULES.map(m => [m.id, m]));
+
+  // 兼容旧格式模块定义（第27章用 title/section 字段），补齐 name 与 color，避免界面出现 undefined
+  const PALETTE = ['#2f81c9','#35a06f','#c77b3a','#8a5fa8','#c04f68','#3f8f8a','#b08a2e','#5b7ec9','#a86a3d','#4d9e5f','#946b9e','#3a9bc9'];
+  let _pi = 0;
+  MODULES.forEach(m => {
+    if (!m.name) m.name = m.title || m.id;
+    if (!m.color) m.color = PALETTE[_pi++ % PALETTE.length];
+  });
+
   let selected = new Set(MODULES.map(m => m.id));
   let mode = 'seq';
   let deck = [], idx = 0, flipped = false;
@@ -1990,19 +2027,83 @@ const CARDS_CH32 = [
 
   const $ = id => document.getElementById(id);
 
-  // ---- 模块 chips ----
+  // ---- 章节手风琴 ----
+  const CHAPTERS = {
+    '00': '抗菌药物速查',
+    '14': '新生儿疾病', '17': '变态反应性疾病', '18': '风湿性疾病',
+    '19': '病毒感染性疾病', '20': '细菌感染性疾病', '21': '小儿结核病',
+    '22': '真菌性疾病', '23': '螺旋体和立克次体感染', '24': '寄生虫病',
+    '25': '呼吸系统疾病', '26': '消化系统疾病', '27': '心血管系统疾病',
+    '28': '泌尿生殖系统疾病', '29': '血液系统疾病', '30': '神经系统疾病',
+    '31': '内分泌疾病', '32': '遗传与染色体疾病'
+  };
+  const chOf = m => { const n = (m.id.match(/^\d+/) || ['00'])[0]; return +n < 10 ? '00' : n; };
+  const cardCount = {};
+  CARDS.forEach(c => { cardCount[c.m] = (cardCount[c.m] || 0) + 1; });
+
   const chipsBox = $('moduleChips');
-  MODULES.forEach(m => {
-    const c = document.createElement('span');
-    c.className = 'chip on';
-    c.textContent = m.id + ' ' + m.name;
-    c.onclick = () => {
-      if (selected.has(m.id)) { selected.delete(m.id); c.classList.remove('on'); }
-      else { selected.add(m.id); c.classList.add('on'); }
+  const groups = {};
+  MODULES.forEach(m => { (groups[chOf(m)] = groups[chOf(m)] || []).push(m); });
+  const chKeys = Object.keys(groups).sort((a, b) => a === '00' ? -1 : b === '00' ? 1 : (+a - +b));
+  const chipEls = {}, chMetas = {};
+
+  chKeys.forEach(ch => {
+    const g = document.createElement('div');
+    g.className = 'ch-group';
+    const head = document.createElement('div');
+    head.className = 'ch-head';
+    const arrow = document.createElement('span');
+    arrow.className = 'ch-arrow'; arrow.textContent = '▶';
+    const title = document.createElement('span');
+    title.className = 'ch-title';
+    title.textContent = (ch === '00' ? '' : '第' + ch + '章 ') + (CHAPTERS[ch] || '其他');
+    const meta = document.createElement('span');
+    meta.className = 'ch-meta';
+    const allBtn = document.createElement('button');
+    allBtn.className = 'ch-all'; allBtn.textContent = '全选';
+    head.appendChild(arrow); head.appendChild(title); head.appendChild(meta); head.appendChild(allBtn);
+    head.onclick = () => g.classList.toggle('open');
+    const body = document.createElement('div');
+    body.className = 'ch-body';
+    groups[ch].forEach(m => {
+      const c = document.createElement('span');
+      c.className = 'chip on';
+      c.textContent = m.id + ' ' + m.name;
+      c.onclick = () => {
+        if (selected.has(m.id)) { selected.delete(m.id); c.classList.remove('on'); }
+        else { selected.add(m.id); c.classList.add('on'); }
+        updateStat();
+      };
+      chipEls[m.id] = c;
+      body.appendChild(c);
+    });
+    const setChapter = on => {
+      groups[ch].forEach(m => {
+        if (on) selected.add(m.id); else selected.delete(m.id);
+        chipEls[m.id].classList.toggle('on', on);
+      });
+      allBtn.textContent = on ? '清空' : '全选';
       updateStat();
     };
-    chipsBox.appendChild(c);
+    allBtn.onclick = e => { e.stopPropagation(); setChapter(allBtn.textContent === '全选'); };
+    g.appendChild(head); g.appendChild(body);
+    chipsBox.appendChild(g);
+    chMetas[ch] = { meta, mods: groups[ch], allBtn };
   });
+
+  function updateChMetas() {
+    Object.entries(chMetas).forEach(([ch, v]) => {
+      const selN = v.mods.filter(m => selected.has(m.id)).length;
+      const cardsN = v.mods.reduce((s, m) => s + (cardCount[m.id] || 0), 0);
+      v.meta.textContent = `已选 ${selN}/${v.mods.length} 模块 · ${cardsN} 张卡`;
+      v.allBtn.textContent = selN === v.mods.length ? '清空' : '全选';
+    });
+  }
+
+  $('btnExpandAll').onclick = () => Object.values(chipsBox.children).forEach(g => g.classList.add('open'));
+  $('btnCollapseAll').onclick = () => Object.values(chipsBox.children).forEach(g => g.classList.remove('open'));
+  $('btnSelectAll').onclick = () => { MODULES.forEach(m => selected.add(m.id)); Object.values(chipEls).forEach(c => c.classList.add('on')); updateStat(); };
+  $('btnSelectNone').onclick = () => { selected.clear(); Object.values(chipEls).forEach(c => c.classList.remove('on')); updateStat(); };
 
   document.querySelectorAll('.mode-btn').forEach(b => {
     b.onclick = () => {
@@ -2037,6 +2138,7 @@ const CARDS_CH32 = [
     const weakCount = Object.values(stats).filter(s => s.wrong > 0).length;
     const dueN = dueCards().length;
     $('statLine').textContent = `已选 ${selected.size} 个模块 · 共 ${total} 张卡 · 历史错题 ${weakCount} 张 · 📅 现在到期 ${dueN} 张`;
+    updateChMetas();
   }
   updateStat();
 
