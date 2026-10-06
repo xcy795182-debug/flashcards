@@ -58,11 +58,6 @@
   .chip:hover { background: rgba(255,255,255,0.14); }
   .chip.on { background: #2f81c9; border-color: #2f81c9; color: #fff; }
   .modes { display: flex; gap: 10px; }
-  .mode-btn {
-    flex: 1; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.05); color: #cfe3f2; cursor: pointer; font-size: 15px;
-  }
-  .mode-btn.on { background: #2f81c9; border-color: #2f81c9; color: #fff; }
   .start-btn {
     width: 100%; margin-top: 22px; padding: 14px; border: none; border-radius: 12px;
     background: linear-gradient(90deg, #2f81c9, #35a7ff); color: #fff;
@@ -211,7 +206,7 @@
     <p style="text-align:center;color:#9fb8cc;font-size:13px" id="resultSub"></p>
     <p style="text-align:center;color:#e8a33d;font-size:13px; margin-top:6px" id="resultNext"></p>
     <div class="weak" id="weakBox">
-      <h3>薄弱模块（建议用"只练错题"重刷）</h3>
+      <h3>薄弱模块（标"重来"的卡 10 分钟后会再次出现）</h3>
       <div id="weakList"></div>
     </div>
     <button class="again-btn" id="againBtn">返回首页</button>
@@ -2161,8 +2156,6 @@ const CARDS_CH32 = [
   $('btnCollapseAll').onclick = () => Object.values(chipsBox.children).forEach(g => g.classList.remove('open'));
   $('btnSelectAll').onclick = () => { MODULES.forEach(m => selected.add(m.id)); Object.values(chipEls).forEach(c => c.classList.add('on')); updateStat(); };
   $('btnSelectNone').onclick = () => { selected.clear(); Object.values(chipEls).forEach(c => c.classList.remove('on')); updateStat(); };
-
-  document.querySelectorAll('.mode-btn').forEach(b => { /* 模式按钮已移除，仅保留记忆曲线复习 */ });
 
   function getDeck() {
     return dueCards();
